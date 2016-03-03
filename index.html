@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Image Search</title>
+	<link href='https://fonts.googleapis.com/css?family=Raleway' rel='stylesheet' type='text/css'>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.css">
+	<style>
+		.container {
+			margin-top: 20px;
+			width: 40%;
+		}
+		.code {
+			display: inline-block;
+			color: hsl(200, 69%, 46%);
+    		background-color: hsl(200, 37%, 96%);
+			padding: 0 5px 0 5px;
+		}
+		a:hover {
+			text-decoration: none;	
+		}
+		#line2 {
+			position: relative;
+			bottom: 25px;
+			padding-left: 28px;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="row">
+			<h1>Image Search API</h1>
+			<p>Created by Daynil - <a href="https://github.com/Daynil/image-search">Github Repo</a></p>
+			<h4>Search for an image by appending a search term to the URL:</h4>
+			<p class="code">/cool%20cat%20pics</p>
+			<h4>Get more results when available by adding:</h4>
+			<p class="code">/cool%20cat%20pics?offset=2</p>
+			<h4>Get your most recent searches:</h4>
+			<p class="code">/recent</p>
+		</div>
+	</div>	
+</body>
+</html>

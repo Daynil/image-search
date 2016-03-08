@@ -7,14 +7,8 @@ var app = express();
 var flickrKey = '0a532377595b0172223d7137864b6397';
 var flickrSecret = 'e63a18c2dc0c77e2';
 var flickrBaseUrl = 'https://api.flickr.com/services/rest/?method=';
-var Photo = (function () {
-    function Photo(url, text) {
-        this.url = url;
-        this.text = text;
-    }
-    return Photo;
-})();
 var searchResults = [];
+var searchCache = [];
 app.use(morgan('dev'));
 var pathname = path.join(process.cwd());
 app.use(express.static(pathname));
@@ -24,39 +18,88 @@ function stripFlickrString(flickrStr) {
     var resGbg = 'jsonFlickrApi(';
     return JSON.parse(resStr.substring(resGbg.length, resStr.length - 1));
 }
-function imageSearch(searchTerm) {
-    var flkrRequest = flickrBaseUrl + "flickr.photos.search&api_key=" + flickrKey + "&format=json&text=" + searchTerm + "&per_page=3";
+function imageSearch(searchTerm, pageNum, userIP) {
+    // Be a good citizen and return cached results for duplicate search queries
+    var userCache = getUserCache(userIP);
+    userCache.forEach(function (search) {
+        if (search.term == searchTerm)
+            return searchResults = search.results;
+    });
+    var flkrRequest = flickrBaseUrl + "flickr.photos.search&api_key=" + flickrKey + "&format=json&text=" + searchTerm + "&per_page=10";
+    if (pageNum)
+        flkrRequest += "&page=" + pageNum;
     return axios.get(flkrRequest);
 }
 function processPhotoData(results) {
     var resJson = stripFlickrString(results);
     var photos = resJson.photos.photo;
-    var photoDetailsPromises = [];
+    // Clear old results
+    searchResults = [];
     photos.forEach(function (photo) {
         var constructedUrl = "https://farm" + photo.farm + ".staticflickr.com/" + photo.server + "/" + photo.id + "_" + photo.secret + ".jpg";
-        var newPhoto = new Photo(constructedUrl, photo.title);
-        var photoDetailsProm = axios.get(flickrBaseUrl + "flickr.photos.getInfo&format=json&api_key=" + flickrKey + "&photo_id=" + photo.id + "&secret=" + photo.secret);
-        photoDetailsProm.then(function (photoInfo) {
-            newPhoto.description = stripFlickrString(photoInfo);
-            searchResults.push(newPhoto);
-        });
-        photoDetailsPromises.push(photoDetailsProm);
+        var newPhoto = {
+            url: constructedUrl,
+            text: photo.title,
+            context: "https://www.flickr.com/photos/" + photo.owner + "/" + photo.id
+        };
+        searchResults.push(newPhoto);
     });
-    return Promise.all(photoDetailsPromises);
+    return;
 }
+/**
+ * If a given user exists in cache, add results, otherwise create a new entry for the user.
+ */
+function cacheResults(userIP, searchTerm) {
+    searchCache.forEach(function (userCache) {
+        if (userCache.user == userIP) {
+            userCache.searches.push({
+                term: searchTerm,
+                when: new Date().toString(),
+                results: searchResults
+            });
+            return;
+        }
+    });
+    // If we got here, no cache exists for the user, create one
+    searchCache.push({
+        user: userIP,
+        searches: [
+            {
+                term: searchTerm,
+                when: new Date().toString(),
+                results: searchResults
+            }
+        ]
+    });
+}
+function getUserCache(userIP) {
+    searchCache.forEach(function (userCache) {
+        if (userCache.user == userIP) {
+            return userCache.searches;
+        }
+    });
+    return [];
+}
+app.get('/recent', function (req, res) {
+    // handle recent query
+    var userIP = req.headers['x-forwarded-for'] || req.ip;
+    var userCache = getUserCache(userIP);
+    res.status(200).json(userCache);
+});
 app.get('/:searchTerm', function (req, res) {
     var searchTerm = req.params.searchTerm;
+    if (searchTerm == 'favicon.ico')
+        return;
     var pageNum = req.query.offset;
-    imageSearch(searchTerm)
+    var userIP = req.headers['x-forwarded-for'] || req.ip;
+    imageSearch(searchTerm, pageNum, userIP)
         .then(processPhotoData)
         .then(function (results) {
-        //console.log();
-        res.status(200).json(searchResults[0].description);
+        cacheResults(userIP, searchTerm);
+        res.status(200).json(searchResults);
     })
         .catch(function (err) { return res.status(400).json({ 'error': err.toString() }); });
 });
-app.get('/recent', function (req, res) {
-    // handle recent query
-});
 var port = process.env.PORT || 3000;
 app.listen(port, function () { return console.log('Listening on port ' + port + '...'); });
+//# sourceMappingURL=server.js.map

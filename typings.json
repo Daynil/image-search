@@ -1,0 +1,8 @@
+{
+  "ambientDependencies": {
+    "axios": "registry:dt/axios#0.9.1+20160227220841",
+    "express": "registry:dt/express#4.0.0+20160208031452",
+    "morgan": "registry:dt/morgan#1.2.2+20160104041339",
+    "node": "registry:dt/node#4.0.0+20160226132328"
+  }
+}

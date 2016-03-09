@@ -3,7 +3,9 @@ import * as express from 'express';
 import * as path from 'path';
 import * as morgan from 'morgan';
 import * as axios from 'axios';
+import * as mongoose from 'mongoose';
 const app: express.Express = express();
+mongoose.connect('mongodb://daynil:d49nDcm%bYO%$d8C@ds023468.mlab.com:23468/imagesearchcache');
 
 const flickrKey = '0a532377595b0172223d7137864b6397';
 const flickrSecret = 'e63a18c2dc0c77e2';
@@ -25,8 +27,15 @@ interface userCache {
 	searches: recentSearches[];
 }
 
+let userCacheSchema = new mongoose.Schema({
+	user: String,
+	searches: Array
+});
+
+let UserCache = mongoose.model('UserCache', userCacheSchema); // Collection userCaches
+
 let searchResults: Photo[] = [];
-let searchCache: userCache[] = [];
+//let searchCache: userCache[] = [];
 
 app.use(morgan('dev'));
 let pathname = path.join(process.cwd());
@@ -71,7 +80,9 @@ function processPhotoData(results) {
  */
 function cacheResults(userIP: string, searchTerm: string) {
 	let existingUser = false;
-	searchCache.forEach(userCache => {
+	
+	return UserCache.findOne({ user: userIP }).exec();
+/*	searchCache.forEach(userCache => {
 		if (userCache.user == userIP) {
 			existingUser = true;
 			userCache.searches.push({
@@ -90,16 +101,16 @@ function cacheResults(userIP: string, searchTerm: string) {
 				}
 			]
 		});	
-	}
+	}*/
 }
 
 function getUserCache(userIP: string) {
 	let cache = [];
-	searchCache.forEach(userCache => {
+/*	searchCache.forEach(userCache => {
 		if (userCache.user == userIP) {
 			cache = userCache.searches;
 		}
-	});
+	});*/
 	return cache;
 }
 

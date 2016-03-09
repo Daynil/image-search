@@ -3,12 +3,19 @@ var express = require('express');
 var path = require('path');
 var morgan = require('morgan');
 var axios = require('axios');
+var mongoose = require('mongoose');
 var app = express();
+mongoose.connect('mongodb://daynil:d49nDcm%bYO%$d8C@ds023468.mlab.com:23468/imagesearchcache');
 var flickrKey = '0a532377595b0172223d7137864b6397';
 var flickrSecret = 'e63a18c2dc0c77e2';
 var flickrBaseUrl = 'https://api.flickr.com/services/rest/?method=';
+var userCacheSchema = new mongoose.Schema({
+    user: String,
+    searches: Array
+});
+var UserCache = mongoose.model('UserCache', userCacheSchema); // Collection userCaches
 var searchResults = [];
-var searchCache = [];
+//let searchCache: userCache[] = [];
 app.use(morgan('dev'));
 var pathname = path.join(process.cwd());
 app.use(express.static(pathname));
@@ -47,34 +54,35 @@ function processPhotoData(results) {
  */
 function cacheResults(userIP, searchTerm) {
     var existingUser = false;
-    searchCache.forEach(function (userCache) {
-        if (userCache.user == userIP) {
-            existingUser = true;
-            userCache.searches.push({
-                term: searchTerm,
-                when: new Date().toString()
-            });
-        }
-    });
-    if (!existingUser) {
-        searchCache.push({
-            user: userIP,
-            searches: [
-                {
+    return UserCache.findOne({ user: userIP }).exec();
+    /*	searchCache.forEach(userCache => {
+            if (userCache.user == userIP) {
+                existingUser = true;
+                userCache.searches.push({
                     term: searchTerm,
                     when: new Date().toString()
-                }
-            ]
+                });
+            }
         });
-    }
+        if (!existingUser) {
+            searchCache.push({
+                user: userIP,
+                searches: [
+                    {
+                        term: searchTerm,
+                        when: new Date().toString()
+                    }
+                ]
+            });
+        }*/
 }
 function getUserCache(userIP) {
     var cache = [];
-    searchCache.forEach(function (userCache) {
-        if (userCache.user == userIP) {
-            cache = userCache.searches;
-        }
-    });
+    /*	searchCache.forEach(userCache => {
+            if (userCache.user == userIP) {
+                cache = userCache.searches;
+            }
+        });*/
     return cache;
 }
 app.get('/recent', function (req, res) {

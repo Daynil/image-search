@@ -7,7 +7,6 @@ var mongoose = require('mongoose');
 var app = express();
 mongoose.connect('mongodb://daynil:d49nDcm%bYO%$d8C@ds023468.mlab.com:23468/imagesearchcache');
 var flickrKey = '0a532377595b0172223d7137864b6397';
-var flickrSecret = 'e63a18c2dc0c77e2';
 var flickrBaseUrl = 'https://api.flickr.com/services/rest/?method=';
 var searchCacheSchema = new mongoose.Schema({
     recentSearches: [{ term: String, when: String, _id: false }]

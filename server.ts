@@ -8,7 +8,6 @@ const app: express.Express = express();
 mongoose.connect('mongodb://daynil:d49nDcm%bYO%$d8C@ds023468.mlab.com:23468/imagesearchcache');
 
 const flickrKey = '0a532377595b0172223d7137864b6397';
-const flickrSecret = 'e63a18c2dc0c77e2';
 const flickrBaseUrl = 'https://api.flickr.com/services/rest/?method=';
 
 interface Photo {

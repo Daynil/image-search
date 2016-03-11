@@ -17,25 +17,23 @@ interface Photo {
 	context: string;
 }
 
-interface recentSearches {
-	term: string;
-	when: string;	
+interface AsyncResults {
+	results: any;
+	searchTerm: string;
 }
 
-interface userCache {
-	user: string;
-	searches: recentSearches[];
+interface searchCache {
+	recentSearches: {
+		term: string;
+		when: string;
+	}[];
 }
 
-let userCacheSchema = new mongoose.Schema({
-	user: String,
-	searches: Array
+let searchCacheSchema = new mongoose.Schema({
+	recentSearches: [{ term: String, when: String, _id: false }]
 });
 
-let UserCache = mongoose.model('UserCache', userCacheSchema); // Collection userCaches
-
-let searchResults: Photo[] = [];
-//let searchCache: userCache[] = [];
+let SearchCache = mongoose.model('SearchCache', searchCacheSchema); // Collection searchcaches
 
 app.use(morgan('dev'));
 let pathname = path.join(process.cwd());
@@ -51,16 +49,20 @@ function stripFlickrString(flickrStr) {
 function imageSearch(searchTerm: string, pageNum: string, userIP: string) {
 	let flkrRequest = `${flickrBaseUrl}flickr.photos.search&api_key=${flickrKey}&format=json&text=${searchTerm}&per_page=10`;
 	if (pageNum) flkrRequest += `&page=${pageNum}`;
-	return axios.get(flkrRequest);
+	return new Promise<AsyncResults>((resolve, reject) => {
+		axios
+			.get(flkrRequest)
+			.then(results => resolve({results: results, searchTerm: searchTerm}))
+			.catch(err =>  reject(err));
+	});
 }
 
-function processPhotoData(results) {
-	let resJson = stripFlickrString(results);
+function processPhotoData(asyncResults: AsyncResults) {
+	let resJson = stripFlickrString(asyncResults.results);
 	let photos: Array<any> = resJson.photos.photo;
 	
-	// Clear old results
-	searchResults = [];
-	return new Promise((resolve, reject) => {
+	let searchResults = [];
+	return new Promise<AsyncResults>((resolve, reject) => {
 		photos.forEach(photo => {
 			let constructedUrl = `https://farm${photo.farm}.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}.jpg`;
 			let newPhoto: Photo = {
@@ -70,56 +72,63 @@ function processPhotoData(results) {
 			};
 			searchResults.push(newPhoto);
 		});
-		resolve();
+		resolve({results: searchResults, searchTerm: asyncResults.searchTerm});
 	});
 
 }
 
-/**
- * If a given user exists in cache, add results, otherwise create a new entry for the user.
- */
-function cacheResults(userIP: string, searchTerm: string) {
-	let existingUser = false;
-	
-	return UserCache.findOne({ user: userIP }).exec();
-/*	searchCache.forEach(userCache => {
-		if (userCache.user == userIP) {
-			existingUser = true;
-			userCache.searches.push({
-				term: searchTerm,
-				when: new Date().toString()
-			});
-		}
-	});
-	if (!existingUser) {
-		searchCache.push({
-			user: userIP,
-			searches: [
-				{
-					term: searchTerm,
-					when: new Date().toString()
+function cacheResults(asyncResults: AsyncResults) {
+	SearchCache.findOne({})
+		.exec()
+		.then((cache: any) => {
+			if (cache == null) {
+				let newCache = new SearchCache({ 
+					recentSearches: [
+						{
+							term: asyncResults.searchTerm,
+							when: new Date().toString()
+						}
+					]
+				});
+				newCache.save( (err) => {
+					if (err) console.log(err);
+				})
+			}
+			else {
+				if (cache.recentSearches.length > 10) {
+					cache.recentSearches.shift();
 				}
-			]
-		});	
-	}*/
-}
-
-function getUserCache(userIP: string) {
-	let cache = [];
-/*	searchCache.forEach(userCache => {
-		if (userCache.user == userIP) {
-			cache = userCache.searches;
-		}
-	});*/
-	return cache;
+				cache.recentSearches.push(
+					{
+						term: asyncResults.searchTerm,
+						when: new Date().toString()
+					}
+				);
+				cache.save(err => console.log(err));
+			}
+		});
 }
 
 app.get('/recent', (req, res) => {
-	// handle recent query
-	let userIP = req.headers['x-forwarded-for'] || req.ip;
-	console.log('IP at retreival: ', userIP);
-	let userCache = getUserCache(userIP);
-	res.status(200).json(userCache);
+	SearchCache.findOne({}).exec()
+		.then((cache: any) => {
+			if (cache == null) res.status(200).end('No recent searches!');
+			else {
+				let searchesArray = cache.recentSearches;
+				// Make sure results are in desired order
+				let orderedResults = [];
+				for (let i = searchesArray.length-1; i >=0; i--) {
+					orderedResults.push(
+						{
+							term: searchesArray[i].term,
+							when: searchesArray[i].when
+						}
+					)
+				}
+				res.status(200).json(orderedResults);
+			}
+		},
+				(err) => res.status(400).json({'error': err.toString()}));
 });
 
 app.get('/:searchTerm', (req, res) => {
@@ -127,12 +136,11 @@ app.get('/:searchTerm', (req, res) => {
 	if (searchTerm == 'favicon.ico') return;
 	let pageNum = req.query.offset;
 	let userIP = req.headers['x-forwarded-for'] || req.ip;
-	console.log('IP at cache: ', userIP);
 	imageSearch(searchTerm, pageNum, userIP)
 		.then(processPhotoData)
-		.then(results => {
-			cacheResults(userIP, searchTerm);
-			res.status(200).json(searchResults);
+		.then((results: AsyncResults) => {
+			cacheResults(results);
+			res.status(200).json(results.results);
 		})
 		.catch(err => res.status(400).json({'error': err.toString()}));
 });

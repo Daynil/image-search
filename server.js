@@ -9,13 +9,10 @@ mongoose.connect('mongodb://daynil:d49nDcm%bYO%$d8C@ds023468.mlab.com:23468/imag
 var flickrKey = '0a532377595b0172223d7137864b6397';
 var flickrSecret = 'e63a18c2dc0c77e2';
 var flickrBaseUrl = 'https://api.flickr.com/services/rest/?method=';
-var userCacheSchema = new mongoose.Schema({
-    user: String,
-    searches: Array
+var searchCacheSchema = new mongoose.Schema({
+    recentSearches: [{ term: String, when: String, _id: false }]
 });
-var UserCache = mongoose.model('UserCache', userCacheSchema); // Collection userCaches
-var searchResults = [];
-//let searchCache: userCache[] = [];
+var SearchCache = mongoose.model('SearchCache', searchCacheSchema); // Collection searchcaches
 app.use(morgan('dev'));
 var pathname = path.join(process.cwd());
 app.use(express.static(pathname));
@@ -29,13 +26,17 @@ function imageSearch(searchTerm, pageNum, userIP) {
     var flkrRequest = flickrBaseUrl + "flickr.photos.search&api_key=" + flickrKey + "&format=json&text=" + searchTerm + "&per_page=10";
     if (pageNum)
         flkrRequest += "&page=" + pageNum;
-    return axios.get(flkrRequest);
+    return new Promise(function (resolve, reject) {
+        axios
+            .get(flkrRequest)
+            .then(function (results) { return resolve({ results: results, searchTerm: searchTerm }); })
+            .catch(function (err) { return reject(err); });
+    });
 }
-function processPhotoData(results) {
-    var resJson = stripFlickrString(results);
+function processPhotoData(asyncResults) {
+    var resJson = stripFlickrString(asyncResults.results);
     var photos = resJson.photos.photo;
-    // Clear old results
-    searchResults = [];
+    var searchResults = [];
     return new Promise(function (resolve, reject) {
         photos.forEach(function (photo) {
             var constructedUrl = "https://farm" + photo.farm + ".staticflickr.com/" + photo.server + "/" + photo.id + "_" + photo.secret + ".jpg";
@@ -46,51 +47,57 @@ function processPhotoData(results) {
             };
             searchResults.push(newPhoto);
         });
-        resolve();
+        resolve({ results: searchResults, searchTerm: asyncResults.searchTerm });
     });
 }
-/**
- * If a given user exists in cache, add results, otherwise create a new entry for the user.
- */
-function cacheResults(userIP, searchTerm) {
-    var existingUser = false;
-    return UserCache.findOne({ user: userIP }).exec();
-    /*	searchCache.forEach(userCache => {
-            if (userCache.user == userIP) {
-                existingUser = true;
-                userCache.searches.push({
-                    term: searchTerm,
-                    when: new Date().toString()
-                });
-            }
-        });
-        if (!existingUser) {
-            searchCache.push({
-                user: userIP,
-                searches: [
+function cacheResults(asyncResults) {
+    SearchCache.findOne({})
+        .exec()
+        .then(function (cache) {
+        if (cache == null) {
+            var newCache = new SearchCache({
+                recentSearches: [
                     {
-                        term: searchTerm,
+                        term: asyncResults.searchTerm,
                         when: new Date().toString()
                     }
                 ]
             });
-        }*/
-}
-function getUserCache(userIP) {
-    var cache = [];
-    /*	searchCache.forEach(userCache => {
-            if (userCache.user == userIP) {
-                cache = userCache.searches;
+            newCache.save(function (err) {
+                if (err)
+                    console.log(err);
+            });
+        }
+        else {
+            if (cache.recentSearches.length > 10) {
+                cache.recentSearches.shift();
             }
-        });*/
-    return cache;
+            cache.recentSearches.push({
+                term: asyncResults.searchTerm,
+                when: new Date().toString()
+            });
+            cache.save(function (err) { return console.log(err); });
+        }
+    });
 }
 app.get('/recent', function (req, res) {
-    // handle recent query
-    var userIP = req.headers['x-forwarded-for'] || req.ip;
-    console.log('IP at retreival: ', userIP);
-    var userCache = getUserCache(userIP);
-    res.status(200).json(userCache);
+    SearchCache.findOne({}).exec()
+        .then(function (cache) {
+        if (cache == null)
+            res.status(200).end('No recent searches!');
+        else {
+            var searchesArray = cache.recentSearches;
+            // Make sure results are in desired order
+            var orderedResults = [];
+            for (var i = searchesArray.length - 1; i >= 0; i--) {
+                orderedResults.push({
+                    term: searchesArray[i].term,
+                    when: searchesArray[i].when
+                });
+            }
+            res.status(200).json(orderedResults);
+        }
+    }, function (err) { return res.status(400).json({ 'error': err.toString() }); });
 });
 app.get('/:searchTerm', function (req, res) {
     var searchTerm = req.params.searchTerm;
@@ -98,12 +105,11 @@ app.get('/:searchTerm', function (req, res) {
         return;
     var pageNum = req.query.offset;
     var userIP = req.headers['x-forwarded-for'] || req.ip;
-    console.log('IP at cache: ', userIP);
     imageSearch(searchTerm, pageNum, userIP)
         .then(processPhotoData)
         .then(function (results) {
-        cacheResults(userIP, searchTerm);
-        res.status(200).json(searchResults);
+        cacheResults(results);
+        res.status(200).json(results.results);
     })
         .catch(function (err) { return res.status(400).json({ 'error': err.toString() }); });
 });

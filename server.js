@@ -22,7 +22,7 @@ function stripFlickrString(flickrStr) {
     var resGbg = 'jsonFlickrApi(';
     return JSON.parse(resStr.substring(resGbg.length, resStr.length - 1));
 }
-function imageSearch(searchTerm, pageNum, userIP) {
+function imageSearch(searchTerm, pageNum) {
     var flkrRequest = flickrBaseUrl + "flickr.photos.search&api_key=" + flickrKey + "&format=json&text=" + searchTerm + "&per_page=10";
     if (pageNum)
         flkrRequest += "&page=" + pageNum;
@@ -104,8 +104,7 @@ app.get('/:searchTerm', function (req, res) {
     if (searchTerm == 'favicon.ico')
         return;
     var pageNum = req.query.offset;
-    var userIP = req.headers['x-forwarded-for'] || req.ip;
-    imageSearch(searchTerm, pageNum, userIP)
+    imageSearch(searchTerm, pageNum)
         .then(processPhotoData)
         .then(function (results) {
         cacheResults(results);

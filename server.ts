@@ -46,7 +46,7 @@ function stripFlickrString(flickrStr) {
 	return JSON.parse(resStr.substring(resGbg.length, resStr.length-1));
 }
 
-function imageSearch(searchTerm: string, pageNum: string, userIP: string) {
+function imageSearch(searchTerm: string, pageNum: string) {
 	let flkrRequest = `${flickrBaseUrl}flickr.photos.search&api_key=${flickrKey}&format=json&text=${searchTerm}&per_page=10`;
 	if (pageNum) flkrRequest += `&page=${pageNum}`;
 	return new Promise<AsyncResults>((resolve, reject) => {
@@ -135,8 +135,7 @@ app.get('/:searchTerm', (req, res) => {
 	let searchTerm: string = req.params.searchTerm;
 	if (searchTerm == 'favicon.ico') return;
 	let pageNum = req.query.offset;
-	let userIP = req.headers['x-forwarded-for'] || req.ip;
-	imageSearch(searchTerm, pageNum, userIP)
+	imageSearch(searchTerm, pageNum)
 		.then(processPhotoData)
 		.then((results: AsyncResults) => {
 			cacheResults(results);
